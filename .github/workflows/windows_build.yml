@@ -56,6 +56,8 @@ jobs:
           $YHSHELL_SRC_DIR="$env:GITHUB_WORKSPACE\yubihsm-shell-src\yubihsm-shell-"
           $MERGEDPATH = Get-ChildItem "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Redist\MSVC\14.*\MergeModules\Microsoft_VC142_CRT_x86.msm"
 
+          Get-Childitem –Path "C:\Program Files (x86)" -Include *Microsoft_VC142_CRT_x86.msm* -Recurse -ErrorAction SilentlyContinue
+
           cd $YHSHELL_SRC_DIR/resources/win
           ./make_installer.ps1 Win32 C:/vcpkg $env:WIX\bin "$MERGEDPATH"
 
