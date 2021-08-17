@@ -59,12 +59,16 @@ static ykhsmauth_rc translate_error(uint16_t sw, uint8_t *retries) {
     return YKHSMAUTHR_STORAGE_FULL;
   } else if (sw == SW_FILE_NOT_FOUND) {
     return YKHSMAUTHR_ENTRY_NOT_FOUND;
-  } else if (sw == SW_FILE_INVALID || sw == SW_WRONG_DATA) {
+  } else if (sw == SW_WRONG_DATA) {
     return YKHSMAUTHR_INVALID_PARAMS;
   } else if (sw == SW_MEMORY_ERROR) {
     return YKHSMAUTHR_MEMORY_ERROR;
   } else if (sw == SW_SECURITY_STATUS_NOT_SATISFIED) {
     return YKHSMAUTHR_TOUCH_ERROR;
+  } else if (sw == SW_FILE_INVALID) {
+    return YKHSMAUTHR_ENTRY_INVALID;
+  } else if (sw == SW_INS_NOT_SUPPORTED) {
+    return YKHSMAUTHR_NOT_SUPPORTED;
   } else {
     return YKHSMAUTHR_GENERIC_ERROR;
   }
@@ -753,6 +757,10 @@ ykhsmauth_rc ykhsmauth_get_challenge(ykhsmauth_state *state, const char *label,
     }
 
     return translate_error(sw, NULL);
+  } else if (sw == SW_SUCCESS &&
+             recv_len ==
+               0) { // First version of applet returned SW_SUCCESS with no data
+    return YKHSMAUTHR_NOT_SUPPORTED;
   }
 
   *challenge_len = recv_len;
