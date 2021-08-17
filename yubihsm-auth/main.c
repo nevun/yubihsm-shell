@@ -220,8 +220,8 @@ static bool list_credentials(ykhsmauth_state *state) {
 
 static bool put_credential(ykhsmauth_state *state, char *mgmkey, char *label,
                            char *derivation_password, char *key_enc,
-                           char *key_mac, char *key_pub, char *key_priv,
-                           char *credpassword, enum enum_touch touch_policy) {
+                           char *key_mac, char *key_priv, char *credpassword,
+                           enum enum_touch touch_policy) {
   ykhsmauth_rc ykhsmauthrc;
   uint8_t mgmkey_parsed[YKHSMAUTH_PW_LEN] = {0};
   size_t mgmkey_parsed_len = sizeof(mgmkey_parsed);
@@ -241,31 +241,11 @@ static bool put_credential(ykhsmauth_state *state, char *mgmkey, char *label,
     return false;
   }
 
-  if (strlen(key_priv)) {
-    key_parsed_len = YKHSMAUTH_YUBICO_ECP256_PRIVKEY_LEN;
-    if (parse_key("Private key", key_priv, key_parsed, &key_parsed_len) ==
-        false) {
-      return false;
-    }
-    ykhsmauthrc =
-      ykhsmauth_put_devicekey(state, mgmkey_parsed, mgmkey_parsed_len,
-                              key_parsed, key_parsed_len);
-    if (ykhsmauthrc != YKHSMAUTHR_SUCCESS) {
-      fprintf(stderr, "Unable to store device key: %s\n",
-              ykhsmauth_strerror(ykhsmauthrc));
-      return false;
-    }
-
-    fprintf(stdout, "Device key successfully stored\n");
-
-    return true;
-  }
-
   if (parse_label("Label", label, label_parsed, &label_parsed_len) == false) {
     return false;
   }
 
-  if (strlen(key_mac) == 0 && strlen(key_enc) == 0 && strlen(key_pub) == 0) {
+  if (strlen(key_mac) == 0 && strlen(key_enc) == 0 && strlen(key_priv) == 0) {
     if (parse_pw("Derivation password", derivation_password, dpw_parsed,
                  &dpw_parsed_len) == false) {
       return false;
@@ -275,11 +255,15 @@ static bool put_credential(ykhsmauth_state *state, char *mgmkey, char *label,
   }
 
   if (dpw_parsed_len == 0) {
-    if (strlen(key_pub)) {
-      key_parsed_len = YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN;
-      if (parse_key("Public key", key_pub, key_parsed, &key_parsed_len) ==
-          false) {
-        return false;
+    if (strlen(key_priv)) {
+      if (strcmp(key_priv, "-")) {
+        key_parsed_len = YKHSMAUTH_YUBICO_ECP256_PRIVKEY_LEN;
+        if (parse_key("Private key", key_priv, key_parsed, &key_parsed_len) ==
+            false) {
+          return false;
+        }
+      } else {
+        key_parsed_len = 0;
       }
     } else {
       size_t key_enc_parsed_len = YKHSMAUTH_YUBICO_AES128_KEY_LEN / 2;
@@ -326,8 +310,8 @@ static bool put_credential(ykhsmauth_state *state, char *mgmkey, char *label,
 
   ykhsmauthrc =
     ykhsmauth_put(state, mgmkey_parsed, mgmkey_parsed_len, label_parsed,
-                  strlen(key_pub) ? YKHSMAUTH_YUBICO_ECP256_ALGO
-                                  : YKHSMAUTH_YUBICO_AES128_ALGO,
+                  strlen(key_priv) ? YKHSMAUTH_YUBICO_ECP256_ALGO
+                                   : YKHSMAUTH_YUBICO_AES128_ALGO,
                   key_parsed, key_parsed_len, cpw_parsed, cpw_parsed_len,
                   touch_policy_parsed, &retries);
   if (ykhsmauthrc != YKHSMAUTHR_SUCCESS) {
@@ -477,7 +461,7 @@ static bool calculate_session_keys(ykhsmauth_state *state, char *label,
 
   ykhsmauthrc =
     ykhsmauth_calculate(state, label_parsed, context_parsed, context_parsed_len,
-                        NULL, 0, cpw_parsed, cpw_parsed_len, key_s_enc,
+                        NULL, 0, NULL, 0, cpw_parsed, cpw_parsed_len, key_s_enc,
                         key_s_enc_len, key_s_mac, key_s_mac_len, key_s_rmac,
                         key_s_rmac_len, &retries);
   if (ykhsmauthrc != YKHSMAUTHR_SUCCESS) {
@@ -574,11 +558,11 @@ int main(int argc, char *argv[]) {
       break;
 
     case action_arg_put:
-      result = put_credential(state, args_info.mgmkey_arg, args_info.label_arg,
-                              args_info.derivation_password_arg,
-                              args_info.enckey_arg, args_info.mackey_arg,
-                              args_info.pubkey_arg, args_info.privkey_arg,
-                              args_info.credpwd_arg, args_info.touch_arg);
+      result =
+        put_credential(state, args_info.mgmkey_arg, args_info.label_arg,
+                       args_info.derivation_password_arg, args_info.enckey_arg,
+                       args_info.mackey_arg, args_info.privkey_arg,
+                       args_info.credpwd_arg, args_info.touch_arg);
       break;
 
     case action_arg_reset:
