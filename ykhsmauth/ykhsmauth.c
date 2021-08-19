@@ -357,7 +357,8 @@ ykhsmauth_rc ykhsmauth_put(ykhsmauth_state *state, const uint8_t *mgmkey,
 
   if (state == NULL || mgmkey == NULL || mgmkey_len != YKHSMAUTH_PW_LEN ||
       label == NULL || strlen(label) < YKHSMAUTH_MIN_LABEL_LEN ||
-      strlen(label) > YKHSMAUTH_MAX_LABEL_LEN || key == NULL || cpw == NULL ||
+      strlen(label) > YKHSMAUTH_MAX_LABEL_LEN || key == NULL ||
+      key_len > YKHSMAUTH_YUBICO_ECP256_PRIVKEY_LEN || cpw == NULL ||
       cpw_len > YKHSMAUTH_PW_LEN) {
     return YKHSMAUTHR_INVALID_PARAMS;
   }
@@ -381,15 +382,14 @@ ykhsmauth_rc ykhsmauth_put(ykhsmauth_state *state, const uint8_t *mgmkey,
 
   if (algo == YKHSMAUTH_YUBICO_AES128_ALGO) {
     *(ptr++) = YKHSMAUTH_TAG_KEY_ENC;
-    ptr += encode_len(ptr, YKHSMAUTH_YUBICO_AES128_KEY_LEN / 2);
-    memcpy(ptr, key, YKHSMAUTH_YUBICO_AES128_KEY_LEN / 2);
-    ptr += YKHSMAUTH_YUBICO_AES128_KEY_LEN / 2;
+    ptr += encode_len(ptr, key_len / 2);
+    memcpy(ptr, key, key_len / 2);
+    ptr += key_len / 2;
 
     *(ptr++) = YKHSMAUTH_TAG_KEY_MAC;
-    ptr += encode_len(ptr, YKHSMAUTH_YUBICO_AES128_KEY_LEN / 2);
-    memcpy(ptr, key + YKHSMAUTH_YUBICO_AES128_KEY_LEN / 2,
-           YKHSMAUTH_YUBICO_AES128_KEY_LEN / 2);
-    ptr += YKHSMAUTH_YUBICO_AES128_KEY_LEN / 2;
+    ptr += encode_len(ptr, key_len / 2);
+    memcpy(ptr, key + key_len / 2, key_len / 2);
+    ptr += key_len / 2;
   } else if (algo == YKHSMAUTH_YUBICO_ECP256_ALGO) {
     *(ptr++) = YKHSMAUTH_TAG_PRIVKEY;
     ptr += encode_len(ptr, key_len);
@@ -681,6 +681,14 @@ ykhsmauth_rc ykhsmauth_get_challenge(ykhsmauth_state *state, const char *label,
   int sw;
   ykhsmauth_rc rc;
 
+  if (state == NULL || label == NULL ||
+      strlen(label) < YKHSMAUTH_MIN_LABEL_LEN ||
+      strlen(label) > YKHSMAUTH_MAX_LABEL_LEN || challenge == NULL ||
+      challenge_len == NULL ||
+      *challenge_len < YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN) {
+    return YKHSMAUTHR_INVALID_PARAMS;
+  }
+
   memset(apdu.raw, 0, sizeof(apdu));
   apdu.st.ins = YKHSMAUTH_INS_GET_CHALLENGE;
 
@@ -702,10 +710,6 @@ ykhsmauth_rc ykhsmauth_get_challenge(ykhsmauth_state *state, const char *label,
     }
 
     return translate_error(sw, NULL);
-  } else if (sw == SW_SUCCESS &&
-             recv_len ==
-               0) { // First version of applet returned SW_SUCCESS with no data
-    return YKHSMAUTHR_NOT_SUPPORTED;
   }
 
   *challenge_len = recv_len;
@@ -722,6 +726,13 @@ ykhsmauth_rc ykhsmauth_get_pubkey(ykhsmauth_state *state, const char *label,
   unsigned long recv_len = sizeof(data);
   int sw;
   ykhsmauth_rc rc;
+
+  if (state == NULL || label == NULL ||
+      strlen(label) < YKHSMAUTH_MIN_LABEL_LEN ||
+      strlen(label) > YKHSMAUTH_MAX_LABEL_LEN || pubkey == NULL ||
+      pubkey_len == NULL || *pubkey_len < YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN) {
+    return YKHSMAUTHR_INVALID_PARAMS;
+  }
 
   memset(apdu.raw, 0, sizeof(apdu));
   apdu.st.ins = YKHSMAUTH_INS_GET_PUBKEY;
