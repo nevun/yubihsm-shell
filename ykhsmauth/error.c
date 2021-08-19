@@ -38,6 +38,7 @@ static const err_t errors[] = {
   ERR(YKHSMAUTHR_STORAGE_FULL, "Device storage full"),
   ERR(YKHSMAUTHR_TOUCH_ERROR, "Device not touched"),
   ERR(YKHSMAUTHR_ENTRY_INVALID, "Entry invalid"),
+  ERR(YKHSMAUTHR_DATA_INVALID, "Invalid authentication data"),
   ERR(YKHSMAUTHR_NOT_SUPPORTED, "Device command not supported"),
 };
 

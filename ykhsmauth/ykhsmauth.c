@@ -67,6 +67,8 @@ static ykhsmauth_rc translate_error(uint16_t sw, uint8_t *retries) {
     return YKHSMAUTHR_TOUCH_ERROR;
   } else if (sw == SW_FILE_INVALID) {
     return YKHSMAUTHR_ENTRY_INVALID;
+  } else if (sw == SW_DATA_INVALID) {
+    return YKHSMAUTHR_DATA_INVALID;
   } else if (sw == SW_INS_NOT_SUPPORTED) {
     return YKHSMAUTHR_NOT_SUPPORTED;
   } else {
