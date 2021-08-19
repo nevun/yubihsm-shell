@@ -487,7 +487,8 @@ ykhsmauth_rc ykhsmauth_calculate(
   if (state == NULL || label == NULL ||
       strlen(label) < YKHSMAUTH_MIN_LABEL_LEN ||
       strlen(label) > YKHSMAUTH_MAX_LABEL_LEN || context == NULL ||
-      context_len > 2 * YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN || pw == NULL ||
+      context_len > 2 * YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN ||
+      pubkey_len > YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN || pw == NULL ||
       pw_len > YKHSMAUTH_PW_LEN || key_s_enc == NULL ||
       key_s_enc_len != YKHSMAUTH_SESSION_KEY_LEN || key_s_mac == NULL ||
       key_s_mac_len != YKHSMAUTH_SESSION_KEY_LEN || key_s_rmac == NULL ||
@@ -510,13 +511,14 @@ ykhsmauth_rc ykhsmauth_calculate(
   memcpy(ptr, context, context_len);
   ptr += context_len;
 
-  if (pubkey_len) {
+  if (pubkey && pubkey_len) {
     *(ptr++) = YKHSMAUTH_TAG_PUBKEY;
     ptr += encode_len(ptr, pubkey_len);
     memcpy(ptr, pubkey, pubkey_len);
     ptr += pubkey_len;
   }
 
+  // Only send rersponse for asym auth
   if (card_crypto_len > YKHSMAUTH_CARD_CRYPTO_LEN) {
     *(ptr++) = YKHSMAUTH_TAG_RESPONSE;
     ptr += encode_len(ptr, card_crypto_len);
