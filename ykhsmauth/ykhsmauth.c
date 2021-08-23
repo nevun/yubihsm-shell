@@ -369,8 +369,8 @@ ykhsmauth_rc ykhsmauth_put(ykhsmauth_state *state, const uint8_t *mgmkey,
   apdu.st.ins = YKHSMAUTH_INS_PUT;
 
   *(ptr++) = YKHSMAUTH_TAG_MGMKEY;
-  ptr += encode_len(ptr, 16);
-  memcpy(ptr, mgmkey, 16);
+  ptr += encode_len(ptr, YKHSMAUTH_PW_LEN);
+  memcpy(ptr, mgmkey, YKHSMAUTH_PW_LEN);
   ptr += 16;
 
   *(ptr++) = YKHSMAUTH_TAG_LABEL;
@@ -490,7 +490,8 @@ ykhsmauth_rc ykhsmauth_calculate(
       strlen(label) < YKHSMAUTH_MIN_LABEL_LEN ||
       strlen(label) > YKHSMAUTH_MAX_LABEL_LEN || context == NULL ||
       context_len > 2 * YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN ||
-      pubkey_len > YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN || pw == NULL ||
+      pubkey_len > YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN ||
+      card_crypto_len > YKHSMAUTH_SESSION_KEY_LEN || pw == NULL ||
       pw_len > YKHSMAUTH_PW_LEN || key_s_enc == NULL ||
       key_s_enc_len != YKHSMAUTH_SESSION_KEY_LEN || key_s_mac == NULL ||
       key_s_mac_len != YKHSMAUTH_SESSION_KEY_LEN || key_s_rmac == NULL ||
@@ -547,8 +548,7 @@ ykhsmauth_rc ykhsmauth_calculate(
     return translate_error(sw, retries);
   }
 
-  if (recv_len != 3 * YKHSMAUTH_SESSION_KEY_LEN &&
-      recv_len != 3 * YKHSMAUTH_SESSION_KEY_LEN + YKHSMAUTH_HOST_CRYPTO_LEN) {
+  if (recv_len != 3 * YKHSMAUTH_SESSION_KEY_LEN) {
     if (state->verbose) {
       fprintf(stderr, "Wrong length returned: %lu\n", recv_len);
     }
