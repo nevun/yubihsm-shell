@@ -1667,6 +1667,32 @@ int yh_com_open_yksession(yubihsm_context *ctx, Argument *argv,
               yh_strerror(yrc));
       return -1;
     }
+
+    if (device_pubkey_len != YH_EC_P256_PUBKEY_LEN) {
+      fprintf(stderr, "Invalid device pubkey\n");
+      return -1;
+    }
+
+#ifdef USE_ASYMMETRIC_AUTH
+
+    int matched = 0;
+    for (uint8_t **pubkey = ctx->device_pubkey_list; *pubkey; pubkey++) {
+      if (!memcmp(*pubkey, device_pubkey, device_pubkey_len)) {
+        matched++;
+      }
+    }
+
+    if (ctx->device_pubkey_list[0] == NULL) {
+      fprintf(stderr, "CAUTION: Device public key (PK.SD) not validated\n");
+      for (size_t i = 0; i < device_pubkey_len; i++)
+        fprintf(stderr, "%02x", device_pubkey[i]);
+      fprintf(stderr, "\n");
+    } else if (matched == 0) {
+      fprintf(stderr, "Failed to validate device pubkey\n");
+      return -1;
+    }
+
+#endif
   }
 
   yrc =
