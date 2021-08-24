@@ -154,12 +154,15 @@ ykhsmauth_rc ykhsmauth_put(ykhsmauth_state *state, const uint8_t *mgmkey,
 
 ykhsmauth_rc ykhsmauth_delete(ykhsmauth_state *state, uint8_t *mgmkey,
                               size_t mgmkey_len, char *label, uint8_t *retries);
-ykhsmauth_rc ykhsmauth_calculate(
-  ykhsmauth_state *state, const char *label, uint8_t *context,
-  size_t context_len, uint8_t *pubkey, size_t pubkey_len, uint8_t *card_crypto,
-  size_t card_crypto_len, const uint8_t *pw, size_t pw_len, uint8_t *key_s_enc,
-  size_t key_s_enc_len, uint8_t *key_s_mac, size_t key_s_mac_len,
-  uint8_t *key_s_rmac, size_t key_s_rmac_len, uint8_t *retries);
+ykhsmauth_rc ykhsmauth_calculate(ykhsmauth_state *state, const char *label,
+                                 uint8_t *context, size_t context_len,
+                                 uint8_t *card_pubkey, size_t card_pubkey_len,
+                                 uint8_t *card_crypto, size_t card_crypto_len,
+                                 const uint8_t *pw, size_t pw_len,
+                                 uint8_t *key_s_enc, size_t key_s_enc_len,
+                                 uint8_t *key_s_mac, size_t key_s_mac_len,
+                                 uint8_t *key_s_rmac, size_t key_s_rmac_len,
+                                 uint8_t *retries);
 ykhsmauth_rc ykhsmauth_reset(ykhsmauth_state *state);
 ykhsmauth_rc ykhsmauth_list_keys(ykhsmauth_state *state,
                                  ykhsmauth_list_entry *list,

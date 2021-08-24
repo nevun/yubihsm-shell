@@ -472,12 +472,15 @@ ykhsmauth_rc ykhsmauth_delete(ykhsmauth_state *state, uint8_t *mgmkey,
   return YKHSMAUTHR_SUCCESS;
 }
 
-ykhsmauth_rc ykhsmauth_calculate(
-  ykhsmauth_state *state, const char *label, uint8_t *context,
-  size_t context_len, uint8_t *pubkey, size_t pubkey_len, uint8_t *card_crypto,
-  size_t card_crypto_len, const uint8_t *pw, size_t pw_len, uint8_t *key_s_enc,
-  size_t key_s_enc_len, uint8_t *key_s_mac, size_t key_s_mac_len,
-  uint8_t *key_s_rmac, size_t key_s_rmac_len, uint8_t *retries) {
+ykhsmauth_rc ykhsmauth_calculate(ykhsmauth_state *state, const char *label,
+                                 uint8_t *context, size_t context_len,
+                                 uint8_t *card_pubkey, size_t card_pubkey_len,
+                                 uint8_t *card_crypto, size_t card_crypto_len,
+                                 const uint8_t *pw, size_t pw_len,
+                                 uint8_t *key_s_enc, size_t key_s_enc_len,
+                                 uint8_t *key_s_mac, size_t key_s_mac_len,
+                                 uint8_t *key_s_rmac, size_t key_s_rmac_len,
+                                 uint8_t *retries) {
   APDU apdu;
   uint8_t *ptr;
   unsigned char data[64]; // NOTE(adma): must be >= (3 * YKHSMAUTH_KEY_LEN +
@@ -490,7 +493,7 @@ ykhsmauth_rc ykhsmauth_calculate(
       strlen(label) < YKHSMAUTH_MIN_LABEL_LEN ||
       strlen(label) > YKHSMAUTH_MAX_LABEL_LEN || context == NULL ||
       context_len > 2 * YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN ||
-      pubkey_len > YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN ||
+      card_pubkey_len > YKHSMAUTH_YUBICO_ECP256_PUBKEY_LEN ||
       card_crypto_len > YKHSMAUTH_SESSION_KEY_LEN || pw == NULL ||
       pw_len > YKHSMAUTH_PW_LEN || key_s_enc == NULL ||
       key_s_enc_len != YKHSMAUTH_SESSION_KEY_LEN || key_s_mac == NULL ||
@@ -514,11 +517,11 @@ ykhsmauth_rc ykhsmauth_calculate(
   memcpy(ptr, context, context_len);
   ptr += context_len;
 
-  if (pubkey && pubkey_len) {
+  if (card_pubkey && card_pubkey_len) {
     *(ptr++) = YKHSMAUTH_TAG_PUBKEY;
-    ptr += encode_len(ptr, pubkey_len);
-    memcpy(ptr, pubkey, pubkey_len);
-    ptr += pubkey_len;
+    ptr += encode_len(ptr, card_pubkey_len);
+    memcpy(ptr, card_pubkey, card_pubkey_len);
+    ptr += card_pubkey_len;
   }
 
   // Only send rersponse for asym auth

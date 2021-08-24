@@ -1631,13 +1631,13 @@ int yh_com_open_yksession(yubihsm_context *ctx, Argument *argv,
   uint8_t *yh_context;
 
   uint8_t host_challenge[YH_EC_P256_PUBKEY_LEN];
-  uint8_t device_pubkey[YH_EC_P256_PUBKEY_LEN];
+  uint8_t card_pubkey[YH_EC_P256_PUBKEY_LEN];
   uint8_t card_cryptogram[YH_KEY_LEN];
   uint8_t key_s_enc[YH_KEY_LEN];
   uint8_t key_s_mac[YH_KEY_LEN];
   uint8_t key_s_rmac[YH_KEY_LEN];
   size_t host_challenge_len = sizeof(host_challenge);
-  size_t device_pubkey_len = 0;
+  size_t card_pubkey_len = 0;
   size_t card_cryptogram_len = sizeof(card_cryptogram);
   uint8_t retries;
   yh_rc yrc;
@@ -1659,16 +1659,16 @@ int yh_com_open_yksession(yubihsm_context *ctx, Argument *argv,
 
   if (host_challenge_len == YH_EC_P256_PUBKEY_LEN) {
 
-    device_pubkey_len = sizeof(device_pubkey);
-    yrc = yh_util_get_device_pubkey(ctx->connector, device_pubkey,
-                                    &device_pubkey_len, NULL);
+    card_pubkey_len = sizeof(card_pubkey);
+    yrc = yh_util_get_device_pubkey(ctx->connector, card_pubkey,
+                                    &card_pubkey_len, NULL);
     if (yrc != YHR_SUCCESS) {
       fprintf(stderr, "Failed to retrieve device pubkey: %s\n",
               yh_strerror(yrc));
       return -1;
     }
 
-    if (device_pubkey_len != YH_EC_P256_PUBKEY_LEN) {
+    if (card_pubkey_len != YH_EC_P256_PUBKEY_LEN) {
       fprintf(stderr, "Invalid device pubkey\n");
       return -1;
     }
@@ -1677,15 +1677,15 @@ int yh_com_open_yksession(yubihsm_context *ctx, Argument *argv,
 
     int matched = 0;
     for (uint8_t **pubkey = ctx->device_pubkey_list; *pubkey; pubkey++) {
-      if (!memcmp(*pubkey, device_pubkey, device_pubkey_len)) {
+      if (!memcmp(*pubkey, card_pubkey, card_pubkey_len)) {
         matched++;
       }
     }
 
     if (ctx->device_pubkey_list[0] == NULL) {
       fprintf(stderr, "CAUTION: Device public key (PK.SD) not validated\n");
-      for (size_t i = 0; i < device_pubkey_len; i++)
-        fprintf(stderr, "%02x", device_pubkey[i]);
+      for (size_t i = 0; i < card_pubkey_len; i++)
+        fprintf(stderr, "%02x", card_pubkey[i]);
       fprintf(stderr, "\n");
     } else if (matched == 0) {
       fprintf(stderr, "Failed to validate device pubkey\n");
@@ -1706,11 +1706,11 @@ int yh_com_open_yksession(yubihsm_context *ctx, Argument *argv,
 
   ykhsmauthrc =
     ykhsmauth_calculate(ctx->state, argv[1].s, yh_context,
-                        2 * host_challenge_len, device_pubkey,
-                        device_pubkey_len, card_cryptogram, card_cryptogram_len,
-                        argv[2].x, argv[2].len, key_s_enc, sizeof(key_s_enc),
-                        key_s_mac, sizeof(key_s_mac), key_s_rmac,
-                        sizeof(key_s_rmac), &retries);
+                        2 * host_challenge_len, card_pubkey, card_pubkey_len,
+                        card_cryptogram, card_cryptogram_len, argv[2].x,
+                        argv[2].len, key_s_enc, sizeof(key_s_enc), key_s_mac,
+                        sizeof(key_s_mac), key_s_rmac, sizeof(key_s_rmac),
+                        &retries);
   insecure_memzero(argv[2].x, argv[2].len);
   if (ykhsmauthrc != YKHSMAUTHR_SUCCESS) {
     fprintf(stderr, "Failed to get session keys from the YubiKey: %s",
