@@ -950,6 +950,8 @@ yh_rc yh_create_session(yh_connector *connector, uint16_t authkey_id,
  * @param authkey_id Object ID of the Authentication Key used to authenticate
  *the session
  * @param context pointer to where context data is saved
+ * @param host_challenge Host challenge
+ * @param host_challenge_len Length of host challenge
  * @param card_cryptogram Card cryptogram
  * @param card_cryptogram_len Length of card cryptogram
  * @param session created session
