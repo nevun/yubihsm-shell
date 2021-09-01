@@ -42,6 +42,18 @@ static uint16_t encode_len(uint8_t *buf, uint16_t len) {
   return 1;
 }
 
+static void add_tag(APDU *apdu, uint8_t tag, const void *data, uint16_t len,
+                    uint16_t pad) {
+  uint8_t *ptr = apdu->st.data + apdu->st.lc;
+  *ptr++ = tag;
+  ptr += encode_len(ptr, len + pad);
+  memcpy(ptr, data, len);
+  ptr += len;
+  memset(ptr, 0, pad);
+  ptr += pad;
+  apdu->st.lc = ptr - apdu->st.data;
+}
+
 static void dump_hex(const unsigned char *buf, unsigned int len) {
   unsigned int i;
   for (i = 0; i < len; i++) {
@@ -226,17 +238,12 @@ ykhsmauth_rc ykhsmauth_connect(ykhsmauth_state *state, const char *wanted) {
       continue;
     }
 
-    APDU apdu;
-    unsigned char data[0xff];
+    APDU apdu = {
+      {0, 0xa4, 0x04, 0, 7, {0xa0, 0x00, 0x00, 0x05, 0x27, 0x21, 0x07}}};
+    unsigned char data[256];
     unsigned long recv_len = sizeof(data);
     int sw;
     ykhsmauth_rc res;
-
-    memset(apdu.raw, 0, sizeof(apdu));
-    apdu.st.ins = 0xa4;
-    apdu.st.p1 = 0x04;
-    apdu.st.lc = sizeof(aid);
-    memcpy(apdu.st.data, aid, sizeof(aid));
 
     if ((res = send_data(state, &apdu, data, &recv_len, &sw)) !=
         YKHSMAUTHR_SUCCESS) {
@@ -317,8 +324,8 @@ ykhsmauth_rc ykhsmauth_list_readers(ykhsmauth_state *state, char *readers,
 
 ykhsmauth_rc ykhsmauth_get_version(ykhsmauth_state *state, char *version,
                                    size_t len) {
-  APDU apdu;
-  unsigned char data[261];
+  APDU apdu = {{0, YKHSMAUTH_INS_GET_VERSION, 0, 0, 0, {0}}};
+  unsigned char data[256];
   unsigned long recv_len = sizeof(data);
   int sw;
   ykhsmauth_rc res;
@@ -327,8 +334,6 @@ ykhsmauth_rc ykhsmauth_get_version(ykhsmauth_state *state, char *version,
     return YKHSMAUTHR_INVALID_PARAMS;
   }
 
-  memset(apdu.raw, 0, sizeof(apdu));
-  apdu.st.ins = YKHSMAUTH_INS_GET_VERSION;
   if ((res = send_data(state, &apdu, data, &recv_len, &sw)) !=
       YKHSMAUTHR_SUCCESS) {
     return res;
@@ -351,9 +356,8 @@ ykhsmauth_rc ykhsmauth_put(ykhsmauth_state *state, const uint8_t *mgmkey,
                            const uint8_t *key, size_t key_len,
                            const uint8_t *cpw, size_t cpw_len,
                            const uint8_t touch_policy, uint8_t *retries) {
-  APDU apdu;
-  uint8_t *ptr = apdu.st.data;
-  unsigned char data[261];
+  APDU apdu = {{0, YKHSMAUTH_INS_PUT, 0, 0, 0, {0}}};
+  unsigned char data[256];
   unsigned long recv_len = sizeof(data);
   int sw;
 
@@ -365,51 +369,19 @@ ykhsmauth_rc ykhsmauth_put(ykhsmauth_state *state, const uint8_t *mgmkey,
     return YKHSMAUTHR_INVALID_PARAMS;
   }
 
-  memset(apdu.raw, 0, sizeof(apdu));
-  apdu.st.ins = YKHSMAUTH_INS_PUT;
-
-  *(ptr++) = YKHSMAUTH_TAG_MGMKEY;
-  ptr += encode_len(ptr, YKHSMAUTH_PW_LEN);
-  memcpy(ptr, mgmkey, YKHSMAUTH_PW_LEN);
-  ptr += 16;
-
-  *(ptr++) = YKHSMAUTH_TAG_LABEL;
-  ptr += encode_len(ptr, strlen(label));
-  memcpy(ptr, label, strlen(label));
-  ptr += strlen(label);
-
-  *(ptr++) = YKHSMAUTH_TAG_ALGO;
-  ptr += encode_len(ptr, 1);
-  *(ptr++) = algo;
+  add_tag(&apdu, YKHSMAUTH_TAG_MGMKEY, mgmkey, mgmkey_len, 0);
+  add_tag(&apdu, YKHSMAUTH_TAG_LABEL, label, strlen(label), 0);
+  add_tag(&apdu, YKHSMAUTH_TAG_ALGO, &algo, sizeof(algo), 0);
 
   if (algo == YKHSMAUTH_YUBICO_AES128_ALGO) {
-    *(ptr++) = YKHSMAUTH_TAG_KEY_ENC;
-    ptr += encode_len(ptr, key_len / 2);
-    memcpy(ptr, key, key_len / 2);
-    ptr += key_len / 2;
-
-    *(ptr++) = YKHSMAUTH_TAG_KEY_MAC;
-    ptr += encode_len(ptr, key_len / 2);
-    memcpy(ptr, key + key_len / 2, key_len / 2);
-    ptr += key_len / 2;
+    add_tag(&apdu, YKHSMAUTH_TAG_KEY_ENC, key, key_len / 2, 0);
+    add_tag(&apdu, YKHSMAUTH_TAG_KEY_MAC, key + key_len / 2, key_len / 2, 0);
   } else if (algo == YKHSMAUTH_YUBICO_ECP256_ALGO) {
-    *(ptr++) = YKHSMAUTH_TAG_PRIVKEY;
-    ptr += encode_len(ptr, key_len);
-    memcpy(ptr, key, key_len);
-    ptr += key_len;
+    add_tag(&apdu, YKHSMAUTH_TAG_PRIVKEY, key, key_len, 0);
   }
 
-  *(ptr++) = YKHSMAUTH_TAG_PW;
-  ptr += encode_len(ptr, YKHSMAUTH_PW_LEN);
-  memcpy(ptr, cpw, cpw_len);
-  memset(ptr + cpw_len, 0, YKHSMAUTH_PW_LEN - cpw_len);
-  ptr += YKHSMAUTH_PW_LEN;
-
-  *(ptr++) = YKHSMAUTH_TAG_TOUCH;
-  ptr += encode_len(ptr, 1);
-  *(ptr++) = touch_policy ? 1 : 0;
-
-  apdu.st.lc = ptr - apdu.st.data;
+  add_tag(&apdu, YKHSMAUTH_TAG_PW, cpw, cpw_len, YKHSMAUTH_PW_LEN - cpw_len);
+  add_tag(&apdu, YKHSMAUTH_TAG_TOUCH, &touch_policy, sizeof(touch_policy), 0);
 
   ykhsmauth_rc rc = send_data(state, &apdu, data, &recv_len, &sw);
   if (rc != YKHSMAUTHR_SUCCESS) {
@@ -428,9 +400,8 @@ ykhsmauth_rc ykhsmauth_put(ykhsmauth_state *state, const uint8_t *mgmkey,
 ykhsmauth_rc ykhsmauth_delete(ykhsmauth_state *state, uint8_t *mgmkey,
                               size_t mgmkey_len, char *label,
                               uint8_t *retries) {
-  APDU apdu;
-  uint8_t *ptr;
-  unsigned char data[64];
+  APDU apdu = {{0, YKHSMAUTH_INS_DELETE, 0, 0, 0, {0}}};
+  unsigned char data[256];
   unsigned long recv_len = sizeof(data);
   int sw;
   ykhsmauth_rc rc;
@@ -441,22 +412,8 @@ ykhsmauth_rc ykhsmauth_delete(ykhsmauth_state *state, uint8_t *mgmkey,
     return YKHSMAUTHR_INVALID_PARAMS;
   }
 
-  memset(apdu.raw, 0, sizeof(apdu));
-  apdu.st.ins = YKHSMAUTH_INS_DELETE;
-
-  ptr = apdu.st.data;
-
-  *(ptr++) = YKHSMAUTH_TAG_MGMKEY;
-  ptr += encode_len(ptr, 16);
-  memcpy(ptr, mgmkey, 16);
-  ptr += 16;
-
-  *(ptr++) = YKHSMAUTH_TAG_LABEL;
-  ptr += encode_len(ptr, strlen(label));
-  memcpy(ptr, label, strlen(label));
-  ptr += strlen(label);
-
-  apdu.st.lc = ptr - apdu.st.data;
+  add_tag(&apdu, YKHSMAUTH_TAG_MGMKEY, mgmkey, mgmkey_len, 0);
+  add_tag(&apdu, YKHSMAUTH_TAG_LABEL, label, strlen(label), 0);
 
   rc = send_data(state, &apdu, data, &recv_len, &sw);
   if (rc != YKHSMAUTHR_SUCCESS) {
@@ -481,10 +438,9 @@ ykhsmauth_rc ykhsmauth_calculate(ykhsmauth_state *state, const char *label,
                                  uint8_t *key_s_mac, size_t key_s_mac_len,
                                  uint8_t *key_s_rmac, size_t key_s_rmac_len,
                                  uint8_t *retries) {
-  APDU apdu;
-  uint8_t *ptr;
-  unsigned char data[64]; // NOTE(adma): must be >= (3 * YKHSMAUTH_KEY_LEN +
-                          // YKHSMAUTH_HOST_CRYPTO_LEN) + 2 = 58
+  APDU apdu = {{0, YKHSMAUTH_INS_CALCULATE, 0, 0, 0, {0}}};
+  unsigned char data[256]; // NOTE(adma): must be >= (3 * YKHSMAUTH_KEY_LEN +
+                           // YKHSMAUTH_HOST_CRYPTO_LEN) + 2 = 58
   unsigned long recv_len = sizeof(data);
   int sw;
   ykhsmauth_rc rc;
@@ -502,43 +458,19 @@ ykhsmauth_rc ykhsmauth_calculate(ykhsmauth_state *state, const char *label,
     return YKHSMAUTHR_INVALID_PARAMS;
   }
 
-  memset(apdu.raw, 0, sizeof(apdu));
-  apdu.st.ins = YKHSMAUTH_INS_CALCULATE;
-
-  ptr = apdu.st.data;
-
-  *(ptr++) = YKHSMAUTH_TAG_LABEL;
-  ptr += encode_len(ptr, strlen(label));
-  memcpy(ptr, label, strlen(label));
-  ptr += strlen(label);
-
-  *(ptr++) = YKHSMAUTH_TAG_CONTEXT;
-  ptr += encode_len(ptr, context_len);
-  memcpy(ptr, context, context_len);
-  ptr += context_len;
+  add_tag(&apdu, YKHSMAUTH_TAG_LABEL, label, strlen(label), 0);
+  add_tag(&apdu, YKHSMAUTH_TAG_CONTEXT, context, context_len, 0);
 
   if (card_pubkey && card_pubkey_len) {
-    *(ptr++) = YKHSMAUTH_TAG_PUBKEY;
-    ptr += encode_len(ptr, card_pubkey_len);
-    memcpy(ptr, card_pubkey, card_pubkey_len);
-    ptr += card_pubkey_len;
+    add_tag(&apdu, YKHSMAUTH_TAG_PUBKEY, card_pubkey, card_pubkey_len, 0);
   }
 
   // Only send rersponse for asym auth
   if (card_crypto && card_crypto_len > YKHSMAUTH_CARD_CRYPTO_LEN) {
-    *(ptr++) = YKHSMAUTH_TAG_RESPONSE;
-    ptr += encode_len(ptr, card_crypto_len);
-    memcpy(ptr, card_crypto, card_crypto_len);
-    ptr += card_crypto_len;
+    add_tag(&apdu, YKHSMAUTH_TAG_RESPONSE, card_crypto, card_crypto_len, 0);
   }
 
-  *(ptr++) = YKHSMAUTH_TAG_PW;
-  ptr += encode_len(ptr, YKHSMAUTH_PW_LEN);
-  memcpy(ptr, pw, pw_len);
-  memset(ptr + pw_len, 0, YKHSMAUTH_PW_LEN - pw_len);
-  ptr += YKHSMAUTH_PW_LEN;
-
-  apdu.st.lc = ptr - apdu.st.data;
+  add_tag(&apdu, YKHSMAUTH_TAG_PW, pw, pw_len, YKHSMAUTH_PW_LEN - pw_len);
 
   rc = send_data(state, &apdu, data, &recv_len, &sw);
   if (rc != YKHSMAUTHR_SUCCESS) {
@@ -558,7 +490,7 @@ ykhsmauth_rc ykhsmauth_calculate(ykhsmauth_state *state, const char *label,
     return YKHSMAUTHR_GENERIC_ERROR;
   }
 
-  ptr = data;
+  uint8_t *ptr = data;
 
   memcpy(key_s_enc, ptr, YKHSMAUTH_SESSION_KEY_LEN);
   ptr += YKHSMAUTH_SESSION_KEY_LEN;
@@ -574,8 +506,9 @@ ykhsmauth_rc ykhsmauth_calculate(ykhsmauth_state *state, const char *label,
 
 ykhsmauth_rc ykhsmauth_reset(ykhsmauth_state *state) {
 
-  APDU apdu;
-  unsigned char data[8];
+  APDU apdu = {
+    {0, YKHSMAUTH_INS_RESET, YKHSMAUTH_P1_RESET, YKHSMAUTH_P2_RESET, 0, {0}}};
+  unsigned char data[256];
   unsigned long recv_len = sizeof(data);
   int sw;
   ykhsmauth_rc res;
@@ -583,11 +516,6 @@ ykhsmauth_rc ykhsmauth_reset(ykhsmauth_state *state) {
   if (state == NULL) {
     return YKHSMAUTHR_INVALID_PARAMS;
   }
-
-  memset(apdu.raw, 0, sizeof(apdu));
-  apdu.st.ins = YKHSMAUTH_INS_RESET;
-  apdu.st.p1 = YKHSMAUTH_P1_RESET;
-  apdu.st.p2 = YKHSMAUTH_P2_RESET;
 
   res = send_data(state, &apdu, data, &recv_len, &sw);
   if (sw != SW_SUCCESS) {
@@ -605,7 +533,7 @@ ykhsmauth_rc ykhsmauth_list_keys(ykhsmauth_state *state,
                                  ykhsmauth_list_entry *list,
                                  size_t *list_items) {
 
-  APDU apdu;
+  APDU apdu = {{0, YKHSMAUTH_INS_LIST, 0, 0, 0, {0}}};
   unsigned char data[1024];
   unsigned long recv_len = sizeof(data);
   int sw;
@@ -614,9 +542,6 @@ ykhsmauth_rc ykhsmauth_list_keys(ykhsmauth_state *state,
   if (state == NULL || list_items == NULL) {
     return YKHSMAUTHR_INVALID_PARAMS;
   }
-
-  memset(apdu.raw, 0, sizeof(apdu));
-  apdu.st.ins = YKHSMAUTH_INS_LIST;
 
   rc = send_data(state, &apdu, data, &recv_len, &sw);
   if (rc != YKHSMAUTHR_SUCCESS) {
@@ -680,8 +605,8 @@ ykhsmauth_rc ykhsmauth_get_challenge(ykhsmauth_state *state, const char *label,
                                      uint8_t *challenge,
                                      size_t *challenge_len) {
 
-  APDU apdu;
-  unsigned char data[256], *ptr;
+  APDU apdu = {{0, YKHSMAUTH_INS_GET_CHALLENGE, 0, 0, 0, {0}}};
+  unsigned char data[256];
   unsigned long recv_len = sizeof(data);
   int sw;
   ykhsmauth_rc rc;
@@ -694,17 +619,7 @@ ykhsmauth_rc ykhsmauth_get_challenge(ykhsmauth_state *state, const char *label,
     return YKHSMAUTHR_INVALID_PARAMS;
   }
 
-  memset(apdu.raw, 0, sizeof(apdu));
-  apdu.st.ins = YKHSMAUTH_INS_GET_CHALLENGE;
-
-  ptr = apdu.st.data;
-
-  *ptr++ = YKHSMAUTH_TAG_LABEL;
-  ptr += encode_len(ptr, strlen(label));
-  memcpy(ptr, label, strlen(label));
-  ptr += strlen(label);
-
-  apdu.st.lc = ptr - apdu.st.data;
+  add_tag(&apdu, YKHSMAUTH_TAG_LABEL, label, strlen(label), 0);
 
   rc = send_data(state, &apdu, data, &recv_len, &sw);
   if (rc != YKHSMAUTHR_SUCCESS) {
@@ -726,8 +641,8 @@ ykhsmauth_rc ykhsmauth_get_challenge(ykhsmauth_state *state, const char *label,
 ykhsmauth_rc ykhsmauth_get_pubkey(ykhsmauth_state *state, const char *label,
                                   uint8_t *pubkey, size_t *pubkey_len) {
 
-  APDU apdu;
-  unsigned char data[256], *ptr;
+  APDU apdu = {{0, YKHSMAUTH_INS_GET_PUBKEY, 0, 0, 0, {0}}};
+  unsigned char data[256];
   unsigned long recv_len = sizeof(data);
   int sw;
   ykhsmauth_rc rc;
@@ -739,19 +654,7 @@ ykhsmauth_rc ykhsmauth_get_pubkey(ykhsmauth_state *state, const char *label,
     return YKHSMAUTHR_INVALID_PARAMS;
   }
 
-  memset(apdu.raw, 0, sizeof(apdu));
-  apdu.st.ins = YKHSMAUTH_INS_GET_PUBKEY;
-
-  ptr = apdu.st.data;
-
-  if (strlen(label)) {
-    *ptr++ = YKHSMAUTH_TAG_LABEL;
-    ptr += encode_len(ptr, strlen(label));
-    memcpy(ptr, label, strlen(label));
-    ptr += strlen(label);
-  }
-
-  apdu.st.lc = ptr - apdu.st.data;
+  add_tag(&apdu, YKHSMAUTH_TAG_LABEL, label, strlen(label), 0);
 
   rc = send_data(state, &apdu, data, &recv_len, &sw);
   if (rc != YKHSMAUTHR_SUCCESS) {
@@ -772,8 +675,8 @@ ykhsmauth_rc ykhsmauth_get_pubkey(ykhsmauth_state *state, const char *label,
 
 ykhsmauth_rc ykhsmauth_get_mgmkey_retries(ykhsmauth_state *state,
                                           uint8_t *retries) {
-  APDU apdu;
-  unsigned char data[261];
+  APDU apdu = {{0, YKHSMAUTH_INS_GET_MGMKEY_RETRIES, 0, 0, 0, {0}}};
+  unsigned char data[256];
   unsigned long recv_len = sizeof(data);
   int sw;
   ykhsmauth_rc rc;
@@ -782,8 +685,6 @@ ykhsmauth_rc ykhsmauth_get_mgmkey_retries(ykhsmauth_state *state,
     return YKHSMAUTHR_INVALID_PARAMS;
   }
 
-  memset(apdu.raw, 0, sizeof(apdu));
-  apdu.st.ins = YKHSMAUTH_INS_GET_MGMKEY_RETRIES;
   rc = send_data(state, &apdu, data, &recv_len, &sw);
   if (rc != YKHSMAUTHR_SUCCESS) {
     return rc;
@@ -803,9 +704,8 @@ ykhsmauth_rc ykhsmauth_get_mgmkey_retries(ykhsmauth_state *state,
 ykhsmauth_rc ykhsmauth_put_mgmkey(ykhsmauth_state *state, uint8_t *mgmkey,
                                   size_t mgmkey_len, uint8_t *new_mgmkey,
                                   size_t new_mgmkey_len, uint8_t *retries) {
-  APDU apdu;
-  uint8_t *ptr = apdu.st.data;
-  unsigned char data[261];
+  APDU apdu = {{0, YKHSMAUTH_INS_PUT_MGMKEY, 0, 0, 0, {0}}};
+  unsigned char data[256];
   unsigned long recv_len = sizeof(data);
   int sw;
 
@@ -814,20 +714,8 @@ ykhsmauth_rc ykhsmauth_put_mgmkey(ykhsmauth_state *state, uint8_t *mgmkey,
     return YKHSMAUTHR_INVALID_PARAMS;
   }
 
-  memset(apdu.raw, 0, sizeof(apdu));
-  apdu.st.ins = YKHSMAUTH_INS_PUT_MGMKEY;
-
-  *(ptr++) = YKHSMAUTH_TAG_MGMKEY;
-  ptr += encode_len(ptr, 16);
-  memcpy(ptr, mgmkey, 16);
-  ptr += 16;
-
-  *(ptr++) = YKHSMAUTH_TAG_MGMKEY;
-  ptr += encode_len(ptr, 16);
-  memcpy(ptr, new_mgmkey, 16);
-  ptr += 16;
-
-  apdu.st.lc = ptr - apdu.st.data;
+  add_tag(&apdu, YKHSMAUTH_TAG_MGMKEY, mgmkey, mgmkey_len, 0);
+  add_tag(&apdu, YKHSMAUTH_TAG_MGMKEY, new_mgmkey, new_mgmkey_len, 0);
 
   ykhsmauth_rc rc = send_data(state, &apdu, data, &recv_len, &sw);
   if (rc != YKHSMAUTHR_SUCCESS) {
