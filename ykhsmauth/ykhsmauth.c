@@ -239,7 +239,7 @@ ykhsmauth_rc ykhsmauth_connect(ykhsmauth_state *state, const char *wanted) {
     }
 
     APDU apdu = {
-      {0, 0xa4, 0x04, 0, 7, {0xa0, 0x00, 0x00, 0x05, 0x27, 0x21, 0x07}}};
+      {0, 0xa4, 0x04, 0, 8, {0xa0, 0x00, 0x00, 0x05, 0x27, 0x21, 0x07, 0x01}}};
     unsigned char data[256];
     unsigned long recv_len = sizeof(data);
     int sw;
@@ -465,7 +465,7 @@ ykhsmauth_rc ykhsmauth_calculate(ykhsmauth_state *state, const char *label,
     add_tag(&apdu, YKHSMAUTH_TAG_PUBKEY, card_pubkey, card_pubkey_len, 0);
   }
 
-  // Only send rersponse for asym auth
+  // Only send card_crypto for asym auth
   if (card_crypto && card_crypto_len > YKHSMAUTH_CARD_CRYPTO_LEN) {
     add_tag(&apdu, YKHSMAUTH_TAG_RESPONSE, card_crypto, card_crypto_len, 0);
   }
