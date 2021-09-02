@@ -91,7 +91,7 @@ static ykhsmauth_rc translate_error(uint16_t sw, uint8_t *retries) {
 ykhsmauth_rc ykhsmauth_init(ykhsmauth_state **state, int verbose) {
   if (state == NULL) {
     if (verbose) {
-      fprintf(stderr, "Unable to initialize: %s",
+      fprintf(stderr, "Unable to initialize: %s\n",
               ykhsmauth_strerror(YKHSMAUTHR_INVALID_PARAMS));
     }
 
@@ -102,7 +102,7 @@ ykhsmauth_rc ykhsmauth_init(ykhsmauth_state **state, int verbose) {
 
   if (s == NULL) {
     if (verbose) {
-      fprintf(stderr, "Unable to initialize: %s",
+      fprintf(stderr, "Unable to initialize: %s\n",
               ykhsmauth_strerror(YKHSMAUTHR_MEMORY_ERROR));
     }
 
@@ -148,7 +148,7 @@ ykhsmauth_rc ykhsmauth_disconnect(ykhsmauth_state *state) {
 static ykhsmauth_rc send_data(ykhsmauth_state *state, APDU *apdu,
                               unsigned char *data, unsigned long *recv_len,
                               int *sw) {
-  long rc;
+  int32_t rc;
   unsigned int send_len = (unsigned int) apdu->st.lc + 5;
 
   *sw = 0;
@@ -162,7 +162,7 @@ static ykhsmauth_rc send_data(ykhsmauth_state *state, APDU *apdu,
                      (LPDWORD) recv_len);
   if (rc != SCARD_S_SUCCESS) {
     if (state->verbose) {
-      fprintf(stderr, "error: SCardTransmit failed, rc=%08lx\n", rc);
+      fprintf(stderr, "SCardTransmit failed, rc=%08x\n", rc);
     }
     return YKHSMAUTHR_PCSC_ERROR;
   }
@@ -186,7 +186,7 @@ ykhsmauth_rc ykhsmauth_connect(ykhsmauth_state *state, const char *wanted) {
   unsigned long active_protocol;
   char reader_buf[2048];
   size_t num_readers = sizeof(reader_buf);
-  long rc;
+  int32_t rc;
   char *reader_ptr;
 
   if (state == NULL) {
@@ -196,7 +196,7 @@ ykhsmauth_rc ykhsmauth_connect(ykhsmauth_state *state, const char *wanted) {
   ykhsmauth_rc ret = ykhsmauth_list_readers(state, reader_buf, &num_readers);
   if (ret != YKHSMAUTHR_SUCCESS) {
     if (state->verbose) {
-      fprintf(stderr, "Unable to list_readers: %s", ykhsmauth_strerror(ret));
+      fprintf(stderr, "Unable to list_readers: %s\n", ykhsmauth_strerror(ret));
     }
 
     return ret;
@@ -216,7 +216,7 @@ ykhsmauth_rc ykhsmauth_connect(ykhsmauth_state *state, const char *wanted) {
       }
       if (found == false) {
         if (state->verbose) {
-          fprintf(stderr, "skipping reader '%s' since it doesn't match '%s'\n",
+          fprintf(stderr, "Skipping reader '%s' since it doesn't match '%s'\n",
                   reader_ptr, wanted);
         }
         continue;
@@ -224,7 +224,7 @@ ykhsmauth_rc ykhsmauth_connect(ykhsmauth_state *state, const char *wanted) {
     }
 
     if (state->verbose) {
-      fprintf(stderr, "trying to connect to reader '%s'\n", reader_ptr);
+      fprintf(stderr, "Trying to connect to reader '%s'\n", reader_ptr);
     }
 
     rc =
@@ -233,7 +233,7 @@ ykhsmauth_rc ykhsmauth_connect(ykhsmauth_state *state, const char *wanted) {
 
     if (rc != SCARD_S_SUCCESS) {
       if (state->verbose) {
-        fprintf(stderr, "SCardConnect failed, rc=%08lx\n", rc);
+        fprintf(stderr, "SCardConnect failed, rc=%08x\n", rc);
       }
       continue;
     }
@@ -251,25 +251,26 @@ ykhsmauth_rc ykhsmauth_connect(ykhsmauth_state *state, const char *wanted) {
         fprintf(stderr, "Failed communicating with card: '%s'\n",
                 ykhsmauth_strerror(res));
       }
-
-      continue;
-    } else if (sw == SW_SUCCESS) {
-      return YKHSMAUTHR_SUCCESS;
-    } else {
+    } else if (sw != SW_SUCCESS) {
       if (state->verbose) {
         fprintf(stderr, "Failed selecting application: %04x\n", sw);
       }
+    } else {
+      return YKHSMAUTHR_SUCCESS;
     }
+
+    if (state->verbose) {
+      fprintf(stderr, "Disconnecting reader '%s'\n", reader_ptr);
+    }
+    SCardDisconnect(state->card, SCARD_LEAVE_CARD);
+    state->card = 0;
   }
 
-  if (*reader_ptr == '\0') {
-    if (state->verbose) {
-      fprintf(stderr, "error: no usable reader found\n");
-    }
-    SCardReleaseContext(state->context);
-    state->context = SCARD_E_INVALID_HANDLE;
-    return YKHSMAUTHR_PCSC_ERROR;
+  if (state->verbose) {
+    fprintf(stderr, "No usable reader found\n");
   }
+  SCardReleaseContext(state->context);
+  state->context = SCARD_E_INVALID_HANDLE;
 
   return YKHSMAUTHR_GENERIC_ERROR;
 }
@@ -277,7 +278,7 @@ ykhsmauth_rc ykhsmauth_connect(ykhsmauth_state *state, const char *wanted) {
 ykhsmauth_rc ykhsmauth_list_readers(ykhsmauth_state *state, char *readers,
                                     size_t *len) {
   unsigned long num_readers = 0;
-  long rc;
+  int32_t rc;
 
   if (state == NULL || readers == NULL) {
     return YKHSMAUTHR_INVALID_PARAMS;
@@ -287,7 +288,7 @@ ykhsmauth_rc ykhsmauth_list_readers(ykhsmauth_state *state, char *readers,
     rc = SCardEstablishContext(SCARD_SCOPE_SYSTEM, NULL, NULL, &state->context);
     if (rc != SCARD_S_SUCCESS) {
       if (state->verbose) {
-        fprintf(stderr, "error: SCardEstablishContext failed, rc=%08lx\n", rc);
+        fprintf(stderr, "SCardEstablishContext failed, rc=%08x\n", rc);
       }
       return YKHSMAUTHR_PCSC_ERROR;
     }
@@ -296,7 +297,7 @@ ykhsmauth_rc ykhsmauth_list_readers(ykhsmauth_state *state, char *readers,
   rc = SCardListReaders(state->context, NULL, NULL, (LPDWORD) &num_readers);
   if (rc != SCARD_S_SUCCESS) {
     if (state->verbose) {
-      fprintf(stderr, "error: SCardListReaders failed, rc=%08lx\n", rc);
+      fprintf(stderr, "SCardListReaders failed, rc=%08x\n", rc);
     }
     SCardReleaseContext(state->context);
     state->context = SCARD_E_INVALID_HANDLE;
@@ -310,7 +311,7 @@ ykhsmauth_rc ykhsmauth_list_readers(ykhsmauth_state *state, char *readers,
   rc = SCardListReaders(state->context, NULL, readers, (LPDWORD) &num_readers);
   if (rc != SCARD_S_SUCCESS) {
     if (state->verbose) {
-      fprintf(stderr, "error: SCardListReaders failed, rc=%08lx\n", rc);
+      fprintf(stderr, "SCardListReaders failed, rc=%08x\n", rc);
     }
     SCardReleaseContext(state->context);
     state->context = SCARD_E_INVALID_HANDLE;
@@ -360,6 +361,7 @@ ykhsmauth_rc ykhsmauth_put(ykhsmauth_state *state, const uint8_t *mgmkey,
   unsigned char data[256];
   unsigned long recv_len = sizeof(data);
   int sw;
+  ykhsmauth_rc rc;
 
   if (state == NULL || mgmkey == NULL || mgmkey_len != YKHSMAUTH_PW_LEN ||
       label == NULL || strlen(label) < YKHSMAUTH_MIN_LABEL_LEN ||
@@ -383,7 +385,7 @@ ykhsmauth_rc ykhsmauth_put(ykhsmauth_state *state, const uint8_t *mgmkey,
   add_tag(&apdu, YKHSMAUTH_TAG_PW, cpw, cpw_len, YKHSMAUTH_PW_LEN - cpw_len);
   add_tag(&apdu, YKHSMAUTH_TAG_TOUCH, &touch_policy, sizeof(touch_policy), 0);
 
-  ykhsmauth_rc rc = send_data(state, &apdu, data, &recv_len, &sw);
+  rc = send_data(state, &apdu, data, &recv_len, &sw);
   if (rc != YKHSMAUTHR_SUCCESS) {
     return rc;
   } else if (sw != SW_SUCCESS) {
@@ -708,6 +710,7 @@ ykhsmauth_rc ykhsmauth_put_mgmkey(ykhsmauth_state *state, uint8_t *mgmkey,
   unsigned char data[256];
   unsigned long recv_len = sizeof(data);
   int sw;
+  ykhsmauth_rc rc;
 
   if (state == NULL || mgmkey == NULL || mgmkey_len != YKHSMAUTH_PW_LEN ||
       new_mgmkey == NULL || new_mgmkey_len != YKHSMAUTH_PW_LEN) {
@@ -717,7 +720,7 @@ ykhsmauth_rc ykhsmauth_put_mgmkey(ykhsmauth_state *state, uint8_t *mgmkey,
   add_tag(&apdu, YKHSMAUTH_TAG_MGMKEY, mgmkey, mgmkey_len, 0);
   add_tag(&apdu, YKHSMAUTH_TAG_MGMKEY, new_mgmkey, new_mgmkey_len, 0);
 
-  ykhsmauth_rc rc = send_data(state, &apdu, data, &recv_len, &sw);
+  rc = send_data(state, &apdu, data, &recv_len, &sw);
   if (rc != YKHSMAUTHR_SUCCESS) {
     return rc;
   } else if (sw != SW_SUCCESS) {
